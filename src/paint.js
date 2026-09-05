@@ -62,7 +62,7 @@ export function createPaintScreen(root, { onStartAr }) {
         </div>
         <div class="actions">
           <button type="button" class="secondary" id="demoBtn">示範面譜</button>
-          <button type="button" class="ok" id="startBtn">開始變臉</button>
+          <button type="button" id="startBtn">開始變臉</button>
         </div>
       </div>
     </div>
@@ -120,14 +120,14 @@ export function createPaintScreen(root, { onStartAr }) {
   }
 
   function syncTools() {
-    root.querySelector('#brushBtn').className = state.tool === 'brush' ? 'ok' : 'ghost'
-    root.querySelector('#fillBtn').className = state.tool === 'fill' ? 'ok' : 'ghost'
-    root.querySelector('#eraserBtn').className = state.tool === 'eraser' ? 'ok' : 'ghost'
+    root.querySelector('#brushBtn').className = state.tool === 'brush' ? '' : 'ghost'
+    root.querySelector('#fillBtn').className = state.tool === 'fill' ? '' : 'ghost'
+    root.querySelector('#eraserBtn').className = state.tool === 'eraser' ? '' : 'ghost'
     swatches.querySelectorAll('.swatch').forEach((el, idx) => {
       el.classList.toggle('active', state.tool !== 'eraser' && COLORS[idx] === state.color)
     })
     sizes.querySelectorAll('button').forEach((b) => {
-      b.className = Number(b.dataset.size) === state.brushSize ? 'ok' : 'ghost'
+      b.className = Number(b.dataset.size) === state.brushSize ? '' : 'ghost'
     })
   }
 

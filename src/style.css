@@ -7,6 +7,8 @@
   --line: #e8d9c8;
   --accent: #1d4ed8;
   --accent-2: #eab308;
+  --accent-deep: #193826;
+  --focus: #193826;
   --ok: #0f766e;
   --danger: #dc2626;
   --guide: #f97316;
@@ -32,6 +34,13 @@ button {
   font-weight: 600;
 }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:hover:not(:disabled):not(.ghost):not(.secondary):not(.ok):not(.swatch) {
+  background: var(--accent-deep);
+}
+button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 button.secondary { background: #efe4d4; color: var(--ink); }
 button.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
 button.ok { background: var(--ok); color: #fff; }
