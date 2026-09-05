@@ -192,3 +192,10 @@ header.top p {
 }
 .steps li { margin: 0.25rem 0; }
 .ar-actions { display: flex; gap: 0.45rem; flex-wrap: wrap; }
+
+.progress { display: flex; gap: 0.55rem; justify-content: center; margin: 0 0 0.85rem; }
+.progress .dot { width: 12px; height: 12px; border-radius: 50%; background: #5a4068; border: 2px solid #7a6088; }
+.progress .dot.done { background: #c4a574; border-color: #e8c98a; }
+.progress .dot.on { background: #f97316; border-color: #fdba74; transform: scale(1.25); }
+.ar-flash { position: absolute; inset: 0; background: rgba(255,255,255,0.55); pointer-events: none; animation: arflash 0.28s ease-out forwards; z-index: 5; }
+@keyframes arflash { from { opacity: 1; } to { opacity: 0; } }
