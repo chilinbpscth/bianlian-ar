@@ -155,25 +155,46 @@ export function createPaintScreen(root, { onStartAr }) {
     }
   }
 
+  const OVAL = { cx: SIZE * 0.5, cy: SIZE * 0.52, rx: SIZE * 0.38, ry: SIZE * 0.46 }
+
+  function clipOval(ctx) {
+    ctx.beginPath()
+    ctx.ellipse(OVAL.cx, OVAL.cy, OVAL.rx, OVAL.ry, 0, 0, Math.PI * 2)
+    ctx.clip()
+  }
+
   function paintTo(p) {
     const { ctx } = masks[state.active]
+    const width = state.eraser ? 34 : 22
+    ctx.save()
+    clipOval(ctx)
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    ctx.lineWidth = state.eraser ? 36 : 28
+    ctx.lineWidth = width
     ctx.globalCompositeOperation = state.eraser ? 'destination-out' : 'source-over'
     ctx.strokeStyle = state.color
-    ctx.beginPath()
-    if (state.last) ctx.moveTo(state.last.x, state.last.y)
-    else ctx.moveTo(p.x, p.y)
-    ctx.lineTo(p.x, p.y)
-    ctx.stroke()
+    ctx.fillStyle = state.color
+    if (state.last) {
+      ctx.beginPath()
+      ctx.moveTo(state.last.x, state.last.y)
+      ctx.lineTo(p.x, p.y)
+      ctx.stroke()
+    } else {
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, width / 2, 0, Math.PI * 2)
+      ctx.fill()
+    }
     ctx.globalCompositeOperation = 'source-over'
+    ctx.restore()
     state.last = p
     redrawView()
   }
 
   function onDown(e) {
     e.preventDefault()
+    if (e.pointerId != null && view.setPointerCapture) {
+      try { view.setPointerCapture(e.pointerId) } catch (_) {}
+    }
     snapshot()
     state.drawing = true
     state.last = null
@@ -184,18 +205,19 @@ export function createPaintScreen(root, { onStartAr }) {
     e.preventDefault()
     paintTo(pointerPos(e))
   }
-  function onUp() {
+  function onUp(e) {
+    if (!state.drawing) return
     state.drawing = false
     state.last = null
     persist()
   }
 
-  view.addEventListener('mousedown', onDown)
-  view.addEventListener('mousemove', onMove)
-  window.addEventListener('mouseup', onUp)
-  view.addEventListener('touchstart', onDown, { passive: false })
-  view.addEventListener('touchmove', onMove, { passive: false })
-  view.addEventListener('touchend', onUp)
+  view.style.touchAction = 'none'
+  view.addEventListener('pointerdown', onDown)
+  view.addEventListener('pointermove', onMove)
+  view.addEventListener('pointerup', onUp)
+  view.addEventListener('pointercancel', onUp)
+  window.addEventListener('pointerup', onUp)
 
   root.querySelector('#brushBtn').onclick = () => { state.eraser = false; syncTools() }
   root.querySelector('#eraserBtn').onclick = () => { state.eraser = true; syncTools() }
@@ -284,7 +306,7 @@ export function createPaintScreen(root, { onStartAr }) {
 
   return {
     destroy() {
-      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('pointerup', onUp)
       root.innerHTML = ''
     },
   }

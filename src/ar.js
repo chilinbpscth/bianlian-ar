@@ -185,30 +185,71 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     ctx.restore()
   }
 
+  let swipeAcc = 0
+  let swipeLastX = null
+  let swipeLastAt = 0
+
   function maybeWave(hands, faces, w, h) {
-    if (!hands.length || !faces.length) { lastWaveX = null; return }
+    if (!hands.length || !faces.length) {
+      lastWaveX = null
+      swipeAcc = 0
+      swipeLastX = null
+      return
+    }
     const face = faces[0]
     const cx = face[1].x * w
     const cy = face[1].y * h
-    const faceW = Math.abs(face[234].x - face[454].x) * w
+    const faceW = Math.max(80, Math.abs(face[234].x - face[454].x) * w)
+    const now = performance.now()
     for (const hand of hands) {
-      const wrist = hand[0]
-      const hx = wrist.x * w
-      const hy = wrist.y * h
-      const near = Math.hypot(hx - cx, hy - cy) < faceW * 1.8 && hy < cy + faceW * 1.2
+      // index fingertip is more stable for a wave than wrist alone
+      const tip = hand[8] || hand[0]
+      const hx = tip.x * w
+      const hy = tip.y * h
+      // allow hand in front / beside face (looser than before)
+      const near = Math.hypot(hx - cx, hy - cy) < faceW * 2.6
       if (!near) continue
-      const now = performance.now()
-      if (lastWaveX != null && now - lastWaveAt < 400) {
-        if (Math.abs(hx - lastWaveX) > faceW * 0.35) {
-          advanceMask("揮手")
-          lastWaveX = null
-          return
-        }
+      if (swipeLastX != null && now - swipeLastAt < 450) {
+        swipeAcc += hx - swipeLastX
+      } else {
+        swipeAcc = 0
+      }
+      swipeLastX = hx
+      swipeLastAt = now
+      // ~0.28 face-width net horizontal travel triggers switch
+      if (Math.abs(swipeAcc) > faceW * 0.28) {
+        advanceMask("揮手", swipeAcc > 0 ? 1 : -1)
+        swipeAcc = 0
+        swipeLastX = null
+        lastWaveX = null
+        return
       }
       lastWaveX = hx
       lastWaveAt = now
     }
   }
+
+  function bindScreenSwipe() {
+    const stage = root.querySelector("#stage")
+    if (!stage) return
+    let x0 = null
+    stage.style.touchAction = "pan-y"
+    const down = (e) => {
+      const t = e.touches ? e.touches[0] : e
+      x0 = t.clientX
+    }
+    const up = (e) => {
+      if (x0 == null) return
+      const t = (e.changedTouches && e.changedTouches[0]) || e
+      const dx = t.clientX - x0
+      x0 = null
+      if (Math.abs(dx) < 56) return
+      advanceMask("手動", dx < 0 ? 1 : -1)
+    }
+    stage.addEventListener("pointerdown", down)
+    stage.addEventListener("pointerup", up)
+  }
+  bindScreenSwipe()
 
   function cleanup() {
     stopped = true
