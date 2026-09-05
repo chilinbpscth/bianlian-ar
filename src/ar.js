@@ -89,9 +89,9 @@ export function createArScreen(root, { maskCanvases, onBack }) {
         baseOptions: { modelAssetPath: modelUrls.hand, delegate },
         runningMode: "VIDEO",
         numHands: 2,
-        minHandDetectionConfidence: 0.25,
-        minHandPresenceConfidence: 0.25,
-        minTrackingConfidence: 0.25,
+        minHandDetectionConfidence: 0.5,
+        minHandPresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
       })
       try {
         faceLandmarker = await faceOpt("GPU")
@@ -161,7 +161,6 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     ctx.restore()
   }
   function palmPoint(hand) {
-    // average wrist + finger MCP joints — stabler than a single fingertip near the face
     const ids = [0, 5, 9, 13, 17]
     let x = 0, y = 0, n = 0
     for (const i of ids) {
@@ -171,15 +170,22 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     if (!n) { const p = hand[8] || hand[0]; return { x: p.x, y: p.y } }
     return { x: x / n, y: y / n }
   }
-  function handSideOfFace(hx, hy, face, w, h) {
+  function faceMetrics(face, w, h) {
     const cx = face[1].x * w, cy = face[1].y * h
-    const faceW = Math.max(80, Math.abs(face[234].x - face[454].x) * w) * 1.35
-    const faceH = Math.max(90, Math.abs(face[10].y - face[152].y) * h) * 1.25
+    const faceW = Math.max(60, Math.abs(face[234].x - face[454].x) * w)
+    const faceH = Math.max(70, Math.abs(face[10].y - face[152].y) * h)
+    const rx = faceW * 0.55, ry = faceH * 0.65
+    return { cx, cy, rx, ry }
+  }
+  function radialState(hx, hy, face, w, h) {
+    const { cx, cy, rx, ry } = faceMetrics(face, w, h)
     const dx = hx - cx, dy = hy - cy
-    // larger "in" zone so a real face-swipe registers
-    if ((dx * dx) / (faceW * faceW) + (dy * dy) / (faceH * faceH) < 1.05) return "in"
-    if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? "L" : "R"
-    return dy < 0 ? "T" : "B"
+    const m = Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry))
+    // Match original hysteresis: outside m>1.0, through m<0.85
+    let zone = "mid"
+    if (m > 1.05) zone = "out"
+    else if (m < 0.85) zone = "in"
+    return { m, zone, dx, dy, cx, cy }
   }
   function maybePassThroughWave(hands, faces, w, h) {
     const now = performance.now()
@@ -189,48 +195,60 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     let hint = ""
     hands.forEach((hand, hi) => {
       const p = palmPoint(hand)
-      const region = handSideOfFace(p.x * w, p.y * h, face, w, h)
+      const hx = p.x * w, hy = p.y * h
+      const rs = radialState(hx, hy, face, w, h)
       seen.add(hi)
       let t = tracks.get(hi)
-      if (!t) { t = { phase: "idle", entry: null, seenAt: now, enteredAt: 0 }; tracks.set(hi, t) }
+      if (!t) {
+        t = { phase: "idle", entryDx: 0, entryDy: 0, seenAt: now, enteredAt: 0, smoothX: hx, smoothY: hy }
+        tracks.set(hi, t)
+      }
+      // 3-frame-ish smoothing
+      t.smoothX = t.smoothX * 0.65 + hx * 0.35
+      t.smoothY = t.smoothY * 0.65 + hy * 0.35
+      const rs2 = radialState(t.smoothX, t.smoothY, face, w, h)
       t.seenAt = now
-      if (t.phase === "idle" && region !== "in") {
-        t.entry = region
+
+      if (t.phase === "idle" && rs2.zone === "out") {
         t.phase = "outside"
-        hint = "① 手喺面外 — 而家掃過面部"
-      } else if ((t.phase === "idle" || t.phase === "outside") && region === "in") {
-        // allow starting the stroke slightly late if hand appears already crossing
-        if (!t.entry) t.entry = "L"
-        t.phase = "inside"
-        t.enteredAt = now
-        hint = "② 掃入面部 — 繼續掃出另一邊"
-      } else if (t.phase === "outside" && region === "in") {
-        t.phase = "inside"
-        t.enteredAt = now
-        hint = "② 掃入面部 — 繼續掃出另一邊"
-      } else if (t.phase === "inside" && region === "in") {
-        hint = "② 掃入面部 — 繼續掃出另一邊"
-      } else if (t.phase === "inside" && region !== "in") {
-        // any exit after being inside counts (original: any direction sweep)
-        if (now - t.enteredAt > 40) {
-          advanceMask("揮手")
-          hint = "③ 變臉成功！"
-        }
-        t.phase = "idle"
-        t.entry = null
+        t.entryDx = rs2.dx
+        t.entryDy = rs2.dy
+        hint = "① 手喺面外 — 掃過面部"
       } else if (t.phase === "outside") {
-        hint = "① 手喺面外 — 而家掃過面部"
-        if (region !== "in") t.entry = region
+        hint = "① 手喺面外 — 掃過面部"
+        if (rs2.zone === "out") { t.entryDx = rs2.dx; t.entryDy = rs2.dy }
+        if (rs2.zone === "in") {
+          t.phase = "inside"
+          t.enteredAt = now
+          hint = "② 已穿過 — 繼續向另一邊掃出"
+        }
+      } else if (t.phase === "inside") {
+        hint = "② 已穿過 — 繼續向另一邊掃出"
+        if (rs2.zone === "out") {
+          // original: exit roughly opposite entry (dot < -0.15)
+          const dot = t.entryDx * rs2.dx + t.entryDy * rs2.dy
+          const mag = Math.hypot(t.entryDx, t.entryDy) * Math.hypot(rs2.dx, rs2.dy) || 1
+          const cos = dot / mag
+          if (cos < -0.15 && now - t.enteredAt > 30) {
+            advanceMask("揮手")
+            hint = "③ 變臉成功！"
+            t.phase = "idle"
+          } else {
+            // same-side exit resets like original
+            t.phase = "idle"
+            hint = "要掃去對面先得 — 再由面外試一次"
+          }
+        }
       }
     })
-    // Original behaviour: hand disappears right after crossing still triggers
     for (const [id, t] of [...tracks.entries()]) {
       if (seen.has(id)) continue
-      if (t.phase === "inside" && now - t.seenAt > 80 && now - t.enteredAt > 40) {
+      // disappear after inside triggers immediately (original)
+      if (t.phase === "inside" && now - t.enteredAt > 30) {
         advanceMask("揮手")
         hint = "③ 變臉成功！"
         tracks.delete(id)
-      } else if (now - t.seenAt > 280) {
+      } else if (now - t.seenAt > 300) {
         tracks.delete(id)
       }
     }
