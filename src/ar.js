@@ -89,6 +89,9 @@ export function createArScreen(root, { maskCanvases, onBack }) {
         baseOptions: { modelAssetPath: modelUrls.hand, delegate },
         runningMode: "VIDEO",
         numHands: 2,
+        minHandDetectionConfidence: 0.25,
+        minHandPresenceConfidence: 0.25,
+        minTrackingConfidence: 0.25,
       })
       try {
         faceLandmarker = await faceOpt("GPU")
@@ -121,12 +124,13 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     const faces = faceLandmarker.detectForVideo(video, ts).faceLandmarks || []
     if (faces.length >= 2) stageTitle.textContent = "雙人變臉 · " + STAGE_LABELS[stage]
     else stageTitle.textContent = STAGE_LABELS[stage]
+    const hands = handLandmarker.detectForVideo(video, ts).landmarks || []
+    const gestureHint = maybePassThroughWave(hands, faces, w, h)
     if (!faces.length) tip.textContent = "未偵測到臉 — 請正面望住鏡頭"
-    else if (stage < 4) tip.textContent = "用手喺面前任何方向一掃，即刻變臉！亦可撳「手動變臉」"
+    else if (gestureHint) tip.textContent = gestureHint
+    else if (stage < 4) tip.textContent = "用手由面外掃入再掃出（任何方向）即變臉 · 或撳「手動變臉」"
     else tip.textContent = "真面目 — 再掃一次或撳掣回到面譜一"
     if (stage < 4) for (const lm of faces) drawMaskOnFace(lm, w, h, maskCanvases[stage])
-    const hands = handLandmarker.detectForVideo(video, ts).landmarks || []
-    maybePassThroughWave(hands, faces, w, h)
   }
   function ringPath(landmarks, idx, w, h) {
     ctx.beginPath()
@@ -156,33 +160,81 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     ringPath(landmarks, MOUTH, w, h); ctx.fill()
     ctx.restore()
   }
+  function palmPoint(hand) {
+    // average wrist + finger MCP joints — stabler than a single fingertip near the face
+    const ids = [0, 5, 9, 13, 17]
+    let x = 0, y = 0, n = 0
+    for (const i of ids) {
+      if (!hand[i]) continue
+      x += hand[i].x; y += hand[i].y; n++
+    }
+    if (!n) { const p = hand[8] || hand[0]; return { x: p.x, y: p.y } }
+    return { x: x / n, y: y / n }
+  }
   function handSideOfFace(hx, hy, face, w, h) {
     const cx = face[1].x * w, cy = face[1].y * h
-    const faceW = Math.max(60, Math.abs(face[234].x - face[454].x) * w)
-    const faceH = Math.max(60, Math.abs(face[10].y - face[152].y) * h)
+    const faceW = Math.max(80, Math.abs(face[234].x - face[454].x) * w) * 1.35
+    const faceH = Math.max(90, Math.abs(face[10].y - face[152].y) * h) * 1.25
     const dx = hx - cx, dy = hy - cy
-    if ((dx * dx) / (faceW * faceW) + (dy * dy) / (faceH * faceH) < 0.55) return "in"
+    // larger "in" zone so a real face-swipe registers
+    if ((dx * dx) / (faceW * faceW) + (dy * dy) / (faceH * faceH) < 1.05) return "in"
     if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? "L" : "R"
     return dy < 0 ? "T" : "B"
   }
   function maybePassThroughWave(hands, faces, w, h) {
-    if (!faces.length) { tracks.clear(); return }
+    const now = performance.now()
+    if (!faces.length) { tracks.clear(); return "" }
     const face = faces[0]
     const seen = new Set()
+    let hint = ""
     hands.forEach((hand, hi) => {
-      const tip = hand[8] || hand[0]
-      const region = handSideOfFace(tip.x * w, tip.y * h, face, w, h)
+      const p = palmPoint(hand)
+      const region = handSideOfFace(p.x * w, p.y * h, face, w, h)
       seen.add(hi)
       let t = tracks.get(hi)
-      if (!t) { t = { phase: "idle", entry: null }; tracks.set(hi, t) }
-      if (t.phase === "idle" && region !== "in") { t.entry = region; t.phase = "outside" }
-      else if (t.phase === "outside" && region === "in") { t.phase = "inside" }
-      else if (t.phase === "inside" && region !== "in") {
-        if (t.entry && region !== t.entry) advanceMask("揮手")
-        t.phase = "idle"; t.entry = null
+      if (!t) { t = { phase: "idle", entry: null, seenAt: now, enteredAt: 0 }; tracks.set(hi, t) }
+      t.seenAt = now
+      if (t.phase === "idle" && region !== "in") {
+        t.entry = region
+        t.phase = "outside"
+        hint = "① 手喺面外 — 而家掃過面部"
+      } else if ((t.phase === "idle" || t.phase === "outside") && region === "in") {
+        // allow starting the stroke slightly late if hand appears already crossing
+        if (!t.entry) t.entry = "L"
+        t.phase = "inside"
+        t.enteredAt = now
+        hint = "② 掃入面部 — 繼續掃出另一邊"
+      } else if (t.phase === "outside" && region === "in") {
+        t.phase = "inside"
+        t.enteredAt = now
+        hint = "② 掃入面部 — 繼續掃出另一邊"
+      } else if (t.phase === "inside" && region === "in") {
+        hint = "② 掃入面部 — 繼續掃出另一邊"
+      } else if (t.phase === "inside" && region !== "in") {
+        // any exit after being inside counts (original: any direction sweep)
+        if (now - t.enteredAt > 40) {
+          advanceMask("揮手")
+          hint = "③ 變臉成功！"
+        }
+        t.phase = "idle"
+        t.entry = null
+      } else if (t.phase === "outside") {
+        hint = "① 手喺面外 — 而家掃過面部"
+        if (region !== "in") t.entry = region
       }
     })
-    for (const id of [...tracks.keys()]) if (!seen.has(id)) tracks.delete(id)
+    // Original behaviour: hand disappears right after crossing still triggers
+    for (const [id, t] of [...tracks.entries()]) {
+      if (seen.has(id)) continue
+      if (t.phase === "inside" && now - t.seenAt > 80 && now - t.enteredAt > 40) {
+        advanceMask("揮手")
+        hint = "③ 變臉成功！"
+        tracks.delete(id)
+      } else if (now - t.seenAt > 280) {
+        tracks.delete(id)
+      }
+    }
+    return hint
   }
   function cleanup() {
     stopped = true
