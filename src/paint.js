@@ -6,7 +6,7 @@ const COLORS = [
   '#ffffff', '#64748b',
 ]
 
-const STORAGE_KEY = 'bianlian-masks-v1'
+const STORAGE_KEY = 'bianlian-masks-v2'
 const SIZE = 512
 
 export function createPaintScreen(root, { onStartAr }) {
@@ -24,7 +24,7 @@ export function createPaintScreen(root, { onStartAr }) {
     c.width = SIZE
     c.height = SIZE
     const ctx = c.getContext('2d')
-    drawFaceGuide(ctx)
+    ctx.clearRect(0, 0, SIZE, SIZE)
     return { canvas: c, ctx }
   })
 
@@ -52,7 +52,7 @@ export function createPaintScreen(root, { onStartAr }) {
               <button type="button" class="ghost" id="undoBtn">復原</button>
               <button type="button" class="ghost" id="clearBtn">清空</button>
             </div>
-            <p class="hint">用手指或滑鼠喺面譜上填色。建議保留面形輪廓，AR 會跟住臉形貼上去。</p>
+            <p class="hint">第一步可以撳「示範面譜」睇效果；或者自己喺黃色橢圓入面塗色。塗完撳綠色「開始變臉」。</p>
           </div>
         </div>
         <div class="actions">
@@ -111,7 +111,7 @@ export function createPaintScreen(root, { onStartAr }) {
   }
 
   function redrawView() {
-    viewCtx.clearRect(0, 0, SIZE, SIZE)
+    drawGuideOnView()
     viewCtx.drawImage(masks[state.active].canvas, 0, 0)
   }
 
@@ -122,21 +122,28 @@ export function createPaintScreen(root, { onStartAr }) {
     if (h.length > 30) h.shift()
   }
 
-  function drawFaceGuide(ctx) {
+  function clearMask(ctx) {
     ctx.clearRect(0, 0, SIZE, SIZE)
-    ctx.fillStyle = '#2a1a30'
-    ctx.fillRect(0, 0, SIZE, SIZE)
-    ctx.strokeStyle = '#6a4a78'
-    ctx.lineWidth = 3
-    ctx.setLineDash([8, 8])
-    ctx.beginPath()
-    ctx.ellipse(SIZE * 0.5, SIZE * 0.52, SIZE * 0.38, SIZE * 0.46, 0, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.setLineDash([])
-    ctx.fillStyle = '#8a6a98'
-    ctx.font = '28px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('喺橢圓入面畫', SIZE * 0.5, SIZE * 0.95)
+  }
+
+  function drawGuideOnView() {
+    viewCtx.fillStyle = '#1a1028'
+    viewCtx.fillRect(0, 0, SIZE, SIZE)
+    viewCtx.fillStyle = '#3a2848'
+    viewCtx.beginPath()
+    viewCtx.ellipse(SIZE * 0.5, SIZE * 0.52, SIZE * 0.38, SIZE * 0.46, 0, 0, Math.PI * 2)
+    viewCtx.fill()
+    viewCtx.strokeStyle = '#f0c14a'
+    viewCtx.lineWidth = 4
+    viewCtx.setLineDash([10, 8])
+    viewCtx.beginPath()
+    viewCtx.ellipse(SIZE * 0.5, SIZE * 0.52, SIZE * 0.38, SIZE * 0.46, 0, 0, Math.PI * 2)
+    viewCtx.stroke()
+    viewCtx.setLineDash([])
+    viewCtx.fillStyle = '#f5e6ff'
+    viewCtx.font = '26px sans-serif'
+    viewCtx.textAlign = 'center'
+    viewCtx.fillText('喺黃色橢圓入面畫', SIZE * 0.5, SIZE * 0.96)
   }
 
   function pointerPos(e) {
@@ -152,7 +159,7 @@ export function createPaintScreen(root, { onStartAr }) {
     const { ctx } = masks[state.active]
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    ctx.lineWidth = state.eraser ? 28 : 18
+    ctx.lineWidth = state.eraser ? 36 : 28
     ctx.globalCompositeOperation = state.eraser ? 'destination-out' : 'source-over'
     ctx.strokeStyle = state.color
     ctx.beginPath()
@@ -207,7 +214,7 @@ export function createPaintScreen(root, { onStartAr }) {
   }
   root.querySelector('#clearBtn').onclick = () => {
     snapshot()
-    drawFaceGuide(masks[state.active].ctx)
+    clearMask(masks[state.active].ctx)
     redrawView()
     persist()
   }
@@ -244,14 +251,32 @@ export function createPaintScreen(root, { onStartAr }) {
     } catch (_) { /* ignore quota */ }
   }
 
+  async function loadDemos() {
+    const urls = createDemoMaskDataUrls(SIZE)
+    for (let i = 0; i < 4; i++) {
+      await loadOnto(masks[i], urls[i])
+      state.history[i] = []
+    }
+  }
+
   async function restore() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
-      if (!raw) return
+      if (!raw) {
+        await loadDemos()
+        persist()
+        return
+      }
       const data = JSON.parse(raw)
-      if (!Array.isArray(data) || data.length !== 4) return
+      if (!Array.isArray(data) || data.length !== 4) {
+        await loadDemos()
+        persist()
+        return
+      }
       for (let i = 0; i < 4; i++) await loadOnto(masks[i], data[i])
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      await loadDemos()
+    }
   }
 
   restore().then(redrawView)

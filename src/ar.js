@@ -33,15 +33,23 @@ export function createArScreen(root, { maskCanvases, onBack }) {
         <button type="button" class="ghost" id="backBtn">返回畫面</button>
       </header>
       <div class="panel">
+        <ol class="steps" id="steps">
+          <li>面對鏡頭，等系統偵測到你嘅臉</li>
+          <li>見到面譜貼喺臉上就成功</li>
+          <li>撳「下一個面譜」，或者用手喺面前左右揮動轉面</li>
+        </ol>
         <div class="ar-stage" id="stage">
           <video id="video" playsinline muted autoplay></video>
           <canvas id="overlay"></canvas>
           <div class="ar-overlay">
-            <p class="tip" id="tip">載入模型中…首次可能要十數秒</p>
-            <button type="button" class="secondary" id="nextBtn">下一個面譜</button>
+            <p class="tip" id="tip">載入模型中…首次可能要十數秒，請稍等</p>
+            <div class="ar-actions">
+              <button type="button" class="secondary" id="prevBtn">上一個</button>
+              <button type="button" class="ok" id="nextBtn">下一個面譜</button>
+            </div>
           </div>
         </div>
-        <p class="status" id="status"></p>
+        <p class="status show" id="status">準備開啟相機…</p>
       </div>
     </div>
   `
@@ -55,21 +63,23 @@ export function createArScreen(root, { maskCanvases, onBack }) {
 
   root.querySelector("#backBtn").onclick = () => { cleanup(); onBack() }
   root.querySelector("#nextBtn").onclick = () => advanceMask("手動")
+  root.querySelector("#prevBtn").onclick = () => advanceMask("手動", -1)
 
   function showStatus(msg, isError = false) {
     status.textContent = msg
     status.className = "status show" + (isError ? " error" : "")
   }
 
-  function advanceMask(reason) {
+  function advanceMask(reason, dir = 1) {
     const now = performance.now()
-    if (now < cooldownUntil) return
-    cooldownUntil = now + 900
-    maskIndex = (maskIndex + 1) % maskCanvases.length
+    if (reason === "揮手" && now < cooldownUntil) return
+    if (reason === "揮手") cooldownUntil = now + 900
+    const n = maskCanvases.length
+    maskIndex = (maskIndex + dir + n) % n
     maskLabel.textContent = String(maskIndex + 1)
     tip.textContent = reason === "揮手"
-      ? "偵測到揮手，已轉面譜！繼續喺面前揮動可變下一個"
-      : "已轉去下一個面譜 · 用手喺面前揮動亦可變臉"
+      ? "偵測到揮手，已轉面譜！可再揮，或撳掣轉面"
+      : "已轉面譜 " + (maskIndex + 1) + " · 面對鏡頭就會貼上"
   }
 
   async function init() {
@@ -87,18 +97,32 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     }
 
     try {
+      showStatus("正在載入臉部／手部模型…首次要等一陣")
       const vision = await FilesetResolver.forVisionTasks(modelUrls.wasm)
-      faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: modelUrls.face, delegate: "GPU" },
-        runningMode: "VIDEO",
-        numFaces: 2,
-      })
-      handLandmarker = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: modelUrls.hand, delegate: "GPU" },
-        runningMode: "VIDEO",
-        numHands: 2,
-      })
-      tip.textContent = "用手喺面前揮動變臉 · 可雙人同玩"
+      async function makeFace(delegate) {
+        return FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: modelUrls.face, delegate },
+          runningMode: "VIDEO",
+          numFaces: 2,
+        })
+      }
+      async function makeHand(delegate) {
+        return HandLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: modelUrls.hand, delegate },
+          runningMode: "VIDEO",
+          numHands: 2,
+        })
+      }
+      try {
+        faceLandmarker = await makeFace("GPU")
+        handLandmarker = await makeHand("GPU")
+      } catch (gpuErr) {
+        console.warn(gpuErr)
+        faceLandmarker = await makeFace("CPU")
+        handLandmarker = await makeHand("CPU")
+      }
+      tip.textContent = "請面對鏡頭 · 見到面譜後可撳「下一個面譜」"
+      showStatus("模型已載入。請把臉放入畫面中央。")
       loop()
     } catch (err) {
       console.error(err)
@@ -124,6 +148,13 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     ctx.clearRect(0, 0, w, h)
     const faceResult = faceLandmarker.detectForVideo(video, ts)
     const faces = faceResult.faceLandmarks || []
+    if (!faces.length) {
+      tip.textContent = "未偵測到臉 — 請走近鏡頭、光線充足、正面望住鏡頭"
+      showStatus("下一步：把臉放入畫面中央，等面譜自動貼上")
+    } else {
+      tip.textContent = "已貼面譜 " + (maskIndex + 1) + " — 撳「下一個面譜」或左右揮手轉面"
+      showStatus("成功偵測到臉。用下面掣轉面譜，或用手喺面前揮動。")
+    }
     for (const lm of faces) drawMaskOnFace(lm, w, h, maskCanvases[maskIndex])
     const handResult = handLandmarker.detectForVideo(video, ts)
     maybeWave(handResult.landmarks || [], faces, w, h)
@@ -143,9 +174,14 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     ctx.beginPath()
     pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
     ctx.closePath()
+    ctx.save()
     ctx.clip()
-    ctx.globalAlpha = 0.92
+    ctx.globalAlpha = 0.95
     ctx.drawImage(maskCanvas, minX, minY, maxX - minX, maxY - minY)
+    ctx.restore()
+    ctx.strokeStyle = "rgba(240,193,74,0.85)"
+    ctx.lineWidth = 3
+    ctx.stroke()
     ctx.restore()
   }
 
