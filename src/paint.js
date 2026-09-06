@@ -1,14 +1,16 @@
-import { createDemoMaskDataUrls } from './demoMasks.js'
+import { createDemoMaskDataUrls, MASK_FEATURES } from './demoMasks.js'
 
 const COLORS = [
   '#c41e3a', '#111111', '#f5f0e6', '#eab308', '#1d4ed8',
   '#16a34a', '#7c3aed', '#fb923c', '#7c2d12', '#fb7185',
 ]
 const BRUSH_SIZES = [6, 14, 30]
-const STORAGE_KEY = 'bianlian-masks-v3'
+const STORAGE_KEY = 'bianlian-masks-v4'
 const SIZE = 512
 // Larger outer oval (closer to original orange boundary)
 const OVAL = { cx: SIZE * 0.5, cy: SIZE * 0.5, rx: SIZE * 0.44, ry: SIZE * 0.48 }
+/** Blank 白面譜 base — opaque cream fill inside the oval. */
+const FACE_BASE = '#f7f1e6'
 
 export function createPaintScreen(root, { onStartAr, onBack }) {
   const state = {
@@ -27,6 +29,13 @@ export function createPaintScreen(root, { onStartAr, onBack }) {
     c.height = SIZE
     const ctx = c.getContext('2d', { willReadFrequently: true })
     ctx.clearRect(0, 0, SIZE, SIZE)
+    ctx.save()
+    ctx.beginPath()
+    ctx.ellipse(OVAL.cx, OVAL.cy, OVAL.rx, OVAL.ry, 0, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.fillStyle = FACE_BASE
+    ctx.fillRect(0, 0, SIZE, SIZE)
+    ctx.restore()
     return { canvas: c, ctx }
   })
 
@@ -35,7 +44,7 @@ export function createPaintScreen(root, { onStartAr, onBack }) {
       <header class="top">
         <div>
           <h1>試玩／備案 · iPad 畫面譜</h1>
-          <p>喺橙色範圍入面畫；可以填色、改筆粗，再開始變臉（課堂主線請用實體紙樣）</p>
+          <p>白色面譜底上畫花紋；虛線只係眼位提示，其餘自己設計。課堂主線請用實體紙樣。</p>
         </div>
         <button type="button" class="ghost" id="backHome">返回主頁</button>
       </header>
@@ -58,7 +67,7 @@ export function createPaintScreen(root, { onStartAr, onBack }) {
               <button type="button" class="ghost" id="undoBtn">復原</button>
               <button type="button" class="ghost" id="clearBtn">清空</button>
             </div>
-            <p class="hint">筆跡同填色都只會喺橙色橢圓入面。眼口唔使留窿——AR 會自己開窿。</p>
+            <p class="hint">橢圓已填好白面譜底。虛線標眼位（同埋淡淡嘴位）；筆跡／填色只喺橙框內。眼口唔使留窿——AR 會自己開窿。</p>
           </div>
         </div>
         <div class="actions">
@@ -132,25 +141,65 @@ export function createPaintScreen(root, { onStartAr, onBack }) {
     })
   }
 
+  function fillFaceBase(ctx) {
+    ctx.save()
+    clipOval(ctx)
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.fillStyle = FACE_BASE
+    ctx.fillRect(0, 0, SIZE, SIZE)
+    ctx.restore()
+  }
+
   function drawGuideOnView() {
-    viewCtx.fillStyle = '#1a1028'
+    // Soft paper around the oval (not dark purple)
+    viewCtx.fillStyle = '#efe6d8'
     viewCtx.fillRect(0, 0, SIZE, SIZE)
-    // outer fill guide
-    viewCtx.fillStyle = '#4a3020'
+    // Opaque cream 白面譜 base inside oval (under paint layer)
+    viewCtx.fillStyle = FACE_BASE
     viewCtx.beginPath()
     viewCtx.ellipse(OVAL.cx, OVAL.cy, OVAL.rx, OVAL.ry, 0, 0, Math.PI * 2)
     viewCtx.fill()
+    // Orange boundary
     viewCtx.strokeStyle = '#f97316'
     viewCtx.lineWidth = 5
     viewCtx.beginPath()
     viewCtx.ellipse(OVAL.cx, OVAL.cy, OVAL.rx, OVAL.ry, 0, 0, Math.PI * 2)
     viewCtx.stroke()
-    // inner face hint (dashed)
-    viewCtx.strokeStyle = 'rgba(255,255,255,0.35)'
+  }
+
+  /** Eye guides drawn on top of paint so they stay visible as hints. */
+  function drawFeatureGuides() {
+    const f = MASK_FEATURES
+    viewCtx.strokeStyle = 'rgba(120, 90, 60, 0.5)'
     viewCtx.lineWidth = 2
-    viewCtx.setLineDash([8, 8])
+    viewCtx.setLineDash([6, 6])
+    for (const eye of [f.leftEye, f.rightEye]) {
+      viewCtx.beginPath()
+      viewCtx.ellipse(
+        SIZE * eye.x,
+        SIZE * eye.y,
+        SIZE * f.eyeRx * 1.15,
+        SIZE * f.eyeRy * 1.2,
+        0,
+        0,
+        Math.PI * 2,
+      )
+      viewCtx.stroke()
+    }
+    // Tiny light mouth hint
+    viewCtx.strokeStyle = 'rgba(120, 90, 60, 0.28)'
+    viewCtx.lineWidth = 1.5
+    viewCtx.setLineDash([4, 6])
     viewCtx.beginPath()
-    viewCtx.ellipse(OVAL.cx, OVAL.cy, OVAL.rx * 0.82, OVAL.ry * 0.82, 0, 0, Math.PI * 2)
+    viewCtx.ellipse(
+      SIZE * f.mouth.x,
+      SIZE * f.mouth.y,
+      SIZE * f.mouthRx * 0.85,
+      SIZE * f.mouthRy * 0.85,
+      0,
+      0,
+      Math.PI * 2,
+    )
     viewCtx.stroke()
     viewCtx.setLineDash([])
   }
@@ -158,6 +207,7 @@ export function createPaintScreen(root, { onStartAr, onBack }) {
   function redrawView() {
     drawGuideOnView()
     viewCtx.drawImage(masks[state.active].canvas, 0, 0)
+    drawFeatureGuides()
   }
 
   function snapshot() {
@@ -169,6 +219,11 @@ export function createPaintScreen(root, { onStartAr, onBack }) {
 
   function clearMask(ctx) {
     ctx.clearRect(0, 0, SIZE, SIZE)
+  }
+
+  function resetToBlank(ctx) {
+    clearMask(ctx)
+    fillFaceBase(ctx)
   }
 
   function clipOval(ctx) {
@@ -320,7 +375,7 @@ export function createPaintScreen(root, { onStartAr, onBack }) {
   root.querySelector('#clearBtn').onclick = () => {
     if (!confirm('確定清空呢幅面譜？此操作可撳「復原」撤回。')) return
     snapshot()
-    clearMask(masks[state.active].ctx)
+    resetToBlank(masks[state.active].ctx)
     redrawView()
     persist()
   }

@@ -216,9 +216,9 @@ export function createArScreen(root, { maskCanvases, onBack }) {
       ctx.stroke()
       ctx.fillStyle = "rgba(29, 78, 216, 0.12)"
       ctx.fill()
-      // Inner boundary (m≈0.85)
+      // Inner boundary (m≈0.92 enter zone)
       ctx.beginPath()
-      ctx.ellipse(cx, cy, rx * 0.85, ry * 0.85, 0, 0, Math.PI * 2)
+      ctx.ellipse(cx, cy, rx * 0.92, ry * 0.92, 0, 0, Math.PI * 2)
       ctx.strokeStyle = "rgba(234, 179, 8, 0.65)"
       ctx.lineWidth = 2
       ctx.stroke()
@@ -338,10 +338,10 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     const { cx, cy, rx, ry } = faceMetrics(face, w, h)
     const dx = hx - cx, dy = hy - cy
     const m = Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry))
-    // Match original hysteresis: outside m>1.0, through m<0.85
+    // Forgiving hysteresis for primary-school iPad: outside m>1.05, through m<0.92
     let zone = "mid"
     if (m > 1.05) zone = "out"
-    else if (m < 0.85) zone = "in"
+    else if (m < 0.92) zone = "in"
     return { m, zone, dx, dy, cx, cy }
   }
   function maybePassThroughWave(hands, faces, w, h) {
@@ -382,11 +382,11 @@ export function createArScreen(root, { maskCanvases, onBack }) {
       } else if (t.phase === "inside") {
         hint = "② 已穿過 — 繼續向另一邊掃出"
         if (rs2.zone === "out") {
-          // original: exit roughly opposite entry (dot < -0.15)
+          // Looser opposite-exit (cos < -0.05) — still blocks same-side bounce
           const dot = t.entryDx * rs2.dx + t.entryDy * rs2.dy
           const mag = Math.hypot(t.entryDx, t.entryDy) * Math.hypot(rs2.dx, rs2.dy) || 1
           const cos = dot / mag
-          if (cos < -0.15 && now - t.enteredAt > 30) {
+          if (cos < -0.05 && now - t.enteredAt > 30) {
             advanceMask("揮手")
             hint = "③ 變臉成功！"
             t.phase = "idle"
