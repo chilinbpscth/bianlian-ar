@@ -4,6 +4,7 @@ import {
   FilesetResolver,
 } from "@mediapipe/tasks-vision"
 import modelUrls from "./models.json"
+import { MASK_FEATURES } from "./demoMasks.js"
 
 const FACE_OVAL = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109]
 const LEFT_EYE = [33,160,158,133,153,144]
@@ -232,19 +233,74 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     })
     ctx.closePath()
   }
-  function drawMaskOnFace(landmarks, w, h, maskCanvas) {
+  function avgLandmark(landmarks, idx, w, h) {
+    let x = 0, y = 0
+    for (const i of idx) { x += landmarks[i].x * w; y += landmarks[i].y * h }
+    return { x: x / idx.length, y: y / idx.length }
+  }
+  /** Affine map of 3 source points → 3 dest points (mask UV → face). */
+  function affineFromThree(s0, s1, s2, d0, d1, d2) {
+    const den = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y)
+    if (Math.abs(den) < 1e-6) return null
+    const a = (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + d2.x * (s0.y - s1.y)) / den
+    const c = (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + d2.x * (s1.x - s0.x)) / den
+    const e = (d0.x * (s1.x * s2.y - s2.x * s1.y) + d1.x * (s2.x * s0.y - s0.x * s2.y) + d2.x * (s0.x * s1.y - s1.x * s0.y)) / den
+    const b = (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + d2.y * (s0.y - s1.y)) / den
+    const d = (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + d2.y * (s1.x - s0.x)) / den
+    const f = (d0.y * (s1.x * s2.y - s2.x * s1.y) + d1.y * (s2.x * s0.y - s0.x * s2.y) + d2.y * (s0.x * s1.y - s1.x * s0.y)) / den
+    return { a, b, c, d, e, f }
+  }
+  /** Expand FACE_OVAL from centroid for fuller forehead/cheek/chin coverage. */
+  function clipExpandedFaceOval(landmarks, w, h) {
     const pts = FACE_OVAL.map((i) => ({ x: landmarks[i].x * w, y: landmarks[i].y * h }))
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const p of pts) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y) }
-    const padX = (maxX - minX) * 0.1, padY = (maxY - minY) * 0.12
-    minX -= padX; maxX += padX; minY -= padY; maxY += padY
-    ctx.save()
+    let cx = 0, cy = 0
+    for (const p of pts) { cx += p.x; cy += p.y }
+    cx /= pts.length
+    cy /= pts.length
+    const SCALE = 1.14
+    const FOREHEAD_EXTRA = 1.08 // extra lift on points above centre
     ctx.beginPath()
-    pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+    pts.forEach((p, i) => {
+      const sx = SCALE
+      const sy = p.y < cy ? SCALE * FOREHEAD_EXTRA : SCALE
+      const x = cx + (p.x - cx) * sx
+      const y = cy + (p.y - cy) * sy
+      if (i === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    })
     ctx.closePath()
     ctx.clip()
+  }
+  function drawMaskOnFace(landmarks, w, h, maskCanvas) {
+    const mw = maskCanvas.width || 512
+    const mh = maskCanvas.height || 512
+    // Mask UV is image-left/right; MediaPipe LEFT/RIGHT are person-relative.
+    // Unmirrored video: image-left = person's right eye (RIGHT_EYE). CSS scaleX(-1) mirrors both.
+    const imgLeftEye = avgLandmark(landmarks, RIGHT_EYE, w, h)
+    const imgRightEye = avgLandmark(landmarks, LEFT_EYE, w, h)
+    const mouth = avgLandmark(landmarks, MOUTH, w, h)
+    const s0 = { x: MASK_FEATURES.leftEye.x * mw, y: MASK_FEATURES.leftEye.y * mh }
+    const s1 = { x: MASK_FEATURES.rightEye.x * mw, y: MASK_FEATURES.rightEye.y * mh }
+    const s2 = { x: MASK_FEATURES.mouth.x * mw, y: MASK_FEATURES.mouth.y * mh }
+    const tri = affineFromThree(s0, s1, s2, imgLeftEye, imgRightEye, mouth)
+
+    ctx.save()
+    clipExpandedFaceOval(landmarks, w, h)
     ctx.globalAlpha = 0.96
-    ctx.drawImage(maskCanvas, minX, minY, maxX - minX, maxY - minY)
+    if (tri) {
+      ctx.setTransform(tri.a, tri.b, tri.c, tri.d, tri.e, tri.f)
+      ctx.drawImage(maskCanvas, 0, 0)
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+    } else {
+      // Degenerate pose fallback: padded oval bbox stretch
+      const pts = FACE_OVAL.map((i) => ({ x: landmarks[i].x * w, y: landmarks[i].y * h }))
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      for (const p of pts) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y) }
+      const padX = (maxX - minX) * 0.16, padY = (maxY - minY) * 0.2
+      minX -= padX; maxX += padX; minY -= padY * 1.15; maxY += padY
+      ctx.drawImage(maskCanvas, minX, minY, maxX - minX, maxY - minY)
+    }
+    // Keep real eyes/mouth visible through landmark-aligned holes
     ctx.globalCompositeOperation = "destination-out"
     ctx.fillStyle = "#000"
     ringPath(landmarks, LEFT_EYE, w, h); ctx.fill()
