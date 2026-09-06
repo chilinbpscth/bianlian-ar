@@ -10,7 +10,7 @@ const SIZE = 512
 // Larger outer oval (closer to original orange boundary)
 const OVAL = { cx: SIZE * 0.5, cy: SIZE * 0.5, rx: SIZE * 0.44, ry: SIZE * 0.48 }
 
-export function createPaintScreen(root, { onStartAr }) {
+export function createPaintScreen(root, { onStartAr, onBack }) {
   const state = {
     active: 0,
     color: COLORS[0],
@@ -34,9 +34,10 @@ export function createPaintScreen(root, { onStartAr }) {
     <div class="app-shell">
       <header class="top">
         <div>
-          <h1>變臉 · 畫面譜</h1>
-          <p>喺橙色範圍入面畫；可以填色、改筆粗，再開始變臉</p>
+          <h1>試玩／備案 · iPad 畫面譜</h1>
+          <p>喺橙色範圍入面畫；可以填色、改筆粗，再開始變臉（課堂主線請用實體紙樣）</p>
         </div>
+        <button type="button" class="ghost" id="backHome">返回主頁</button>
       </header>
       <div class="panel">
         <div class="mask-tabs" id="maskTabs"></div>
@@ -377,6 +378,13 @@ export function createPaintScreen(root, { onStartAr }) {
     } catch (_) {
       await loadDemos()
     }
+  }
+
+  if (onBack) {
+    root.querySelector('#backHome').onclick = () => onBack()
+  } else {
+    const bh = root.querySelector('#backHome')
+    if (bh) bh.hidden = true
   }
 
   restore().then(() => {

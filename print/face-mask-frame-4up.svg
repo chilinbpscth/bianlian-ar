@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A4 portrait — 4 smaller face-mask frames for faster classroom printing. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297">
+  <defs>
+    <style type="text/css"><![CDATA[
+      .title { font-family: "Noto Sans TC", "PingFang HK", "Microsoft JhengHei", sans-serif; font-size: 5.5px; font-weight: 700; fill: #2c2420; }
+      .slot { font-family: "Noto Sans TC", "PingFang HK", "Microsoft JhengHei", sans-serif; font-size: 3.2px; font-weight: 700; fill: #2c2420; }
+      .cut { font-family: "Noto Sans TC", "PingFang HK", "Microsoft JhengHei", sans-serif; font-size: 2.4px; font-weight: 700; fill: #9b1c1c; }
+      .hint { font-family: "Noto Sans TC", "PingFang HK", "Microsoft JhengHei", sans-serif; font-size: 3px; fill: #6b5e55; }
+    ]]></style>
+    <!-- One small mask frame: oval rx:ry = 0.44:0.48 -->
+    <g id="mini-mask">
+      <ellipse cx="0" cy="0" rx="38" ry="41.45" fill="#fff3e6" stroke="#f97316" stroke-width="1.2"/>
+      <ellipse cx="0" cy="0" rx="31.2" ry="34" fill="none" stroke="#a89888" stroke-width="0.45" stroke-dasharray="2 1.6"/>
+      <!-- eyes -->
+      <ellipse cx="-13.5" cy="-4" rx="6.5" ry="4.3" fill="#ffffff" stroke="#9b1c1c" stroke-width="0.7" stroke-dasharray="1.2 0.8"/>
+      <ellipse cx="13.5" cy="-4" rx="6.5" ry="4.3" fill="#ffffff" stroke="#9b1c1c" stroke-width="0.7" stroke-dasharray="1.2 0.8"/>
+      <!-- mouth -->
+      <ellipse cx="0" cy="18" rx="10.5" ry="4.8" fill="#ffffff" stroke="#9b1c1c" stroke-width="0.7" stroke-dasharray="1.2 0.8"/>
+      <text x="0" y="-28" text-anchor="middle" class="cut">✂ 眼口剪空</text>
+    </g>
+  </defs>
+
+  <text x="105" y="12" text-anchor="middle" class="title">變臉 · 臉譜紙樣（四格）｜眼口剪空後填色</text>
+  <text x="105" y="18" text-anchor="middle" class="hint">每格獨立剪用 · 橙色＝填色範圍 · 白色眼／口＝剪空</text>
+
+  <!-- Cut guides between cells -->
+  <line x1="105" y1="24" x2="105" y2="278" stroke="#e8d9c8" stroke-width="0.4" stroke-dasharray="2 2"/>
+  <line x1="10" y1="151" x2="200" y2="151" stroke="#e8d9c8" stroke-width="0.4" stroke-dasharray="2 2"/>
+
+  <!-- Top-left: 面譜一 -->
+  <g transform="translate(55,88)">
+    <use href="#mini-mask"/>
+    <text x="0" y="52" text-anchor="middle" class="slot">面譜一</text>
+  </g>
+  <!-- Top-right: 面譜二 -->
+  <g transform="translate(155,88)">
+    <use href="#mini-mask"/>
+    <text x="0" y="52" text-anchor="middle" class="slot">面譜二</text>
+  </g>
+  <!-- Bottom-left: 面譜三 -->
+  <g transform="translate(55,215)">
+    <use href="#mini-mask"/>
+    <text x="0" y="52" text-anchor="middle" class="slot">面譜三</text>
+  </g>
+  <!-- Bottom-right: 面譜四 -->
+  <g transform="translate(155,215)">
+    <use href="#mini-mask"/>
+    <text x="0" y="52" text-anchor="middle" class="slot">面譜四</text>
+  </g>
+
+  <text x="105" y="288" text-anchor="middle" class="hint">A4 直向四格 · 課堂快印 · 變臉視藝 AR</text>
+</svg>

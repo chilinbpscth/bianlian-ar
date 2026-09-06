@@ -27,7 +27,7 @@ export function createArScreen(root, { maskCanvases, onBack }) {
   let loadTimer=0, modelsReady=false
   const debugMode = isDebugMode()
   const tracks = new Map()
-  root.innerHTML = `<div class="app-shell"><header class="top"><div><h1>變臉 · AR</h1><p id="stageTitle">面譜一</p></div><button type="button" class="ghost" id="backBtn">返回畫面</button></header><div class="panel"><div class="progress" id="progress"></div><div class="ar-stage" id="stageBox"><video id="video" playsinline muted autoplay></video><canvas id="overlay"></canvas><div class="ar-overlay"><p class="tip" id="tip">載入模型中…首次可能要十數秒</p><div class="ar-actions"><button type="button" id="photoBtn" class="secondary">影相</button><button type="button" id="manualBtn" class="manual-btn">手動變臉</button></div></div></div><p class="status show" id="status">準備開啟相機…</p></div></div>`
+  root.innerHTML = `<div class="app-shell"><header class="top"><div><h1>變臉 · AR</h1><p id="stageTitle">面譜一</p></div><button type="button" class="ghost" id="backBtn">返回</button></header><div class="panel"><div class="progress" id="progress"></div><div class="ar-stage" id="stageBox"><video id="video" playsinline muted autoplay></video><canvas id="overlay"></canvas><div class="ar-overlay"><p class="tip" id="tip">載入模型中…首次可能要十數秒</p><div class="ar-actions"><button type="button" id="photoBtn" class="secondary">影相</button><button type="button" id="manualBtn" class="manual-btn">手動變臉</button></div></div></div><p class="status show" id="status">準備開啟相機…</p></div></div>`
 
   const video = root.querySelector("#video")
   const canvas = root.querySelector("#overlay")
