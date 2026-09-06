@@ -10,11 +10,24 @@ const LEFT_EYE = [33,160,158,133,153,144]
 const RIGHT_EYE = [362,385,387,263,373,380]
 const MOUTH = [61,40,37,0,267,270,291,321,314,17,84,91]
 const STAGE_LABELS = ["面譜一","面譜二","面譜三","面譜四","真面目"]
+const MASK_COOLDOWN_MS = 900
+const MODEL_LOAD_TIMEOUT_MS = 30000
+
+function isDebugMode() {
+  try {
+    const q = new URLSearchParams(location.search)
+    if (q.get("debug") === "1") return true
+    if ((location.hash || "").includes("debug=1")) return true
+  } catch (_) {}
+  return false
+}
 
 export function createArScreen(root, { maskCanvases, onBack }) {
   let stopped=false, stage=0, faceLandmarker=null, handLandmarker=null, raf=0, stream=null, lastVideoTime=-1, cooldownUntil=0
+  let loadTimer=0, modelsReady=false
+  const debugMode = isDebugMode()
   const tracks = new Map()
-  root.innerHTML = `<div class="app-shell"><header class="top"><div><h1>變臉 · AR</h1><p id="stageTitle">面譜一</p></div><button type="button" class="ghost" id="backBtn">返回畫面</button></header><div class="panel"><div class="progress" id="progress"></div><div class="ar-stage" id="stageBox"><video id="video" playsinline muted autoplay></video><canvas id="overlay"></canvas><div class="ar-overlay"><p class="tip" id="tip">載入模型中…首次可能要十數秒</p><button type="button" id="manualBtn">手動變臉</button></div></div><p class="status show" id="status">準備開啟相機…</p></div></div>`
+  root.innerHTML = `<div class="app-shell"><header class="top"><div><h1>變臉 · AR</h1><p id="stageTitle">面譜一</p></div><button type="button" class="ghost" id="backBtn">返回畫面</button></header><div class="panel"><div class="progress" id="progress"></div><div class="ar-stage" id="stageBox"><video id="video" playsinline muted autoplay></video><canvas id="overlay"></canvas><div class="ar-overlay"><p class="tip" id="tip">載入模型中…首次可能要十數秒</p><div class="ar-actions"><button type="button" id="photoBtn" class="secondary">影相</button><button type="button" id="manualBtn" class="manual-btn">手動變臉</button></div></div></div><p class="status show" id="status">準備開啟相機…</p></div></div>`
 
   const video = root.querySelector("#video")
   const canvas = root.querySelector("#overlay")
@@ -36,6 +49,21 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     status.textContent = msg
     status.className = "status show" + (isError ? " error" : "")
   }
+  function clearLoadTimer() {
+    if (loadTimer) { clearTimeout(loadTimer); loadTimer = 0 }
+  }
+  function offerRetry(msg) {
+    showStatus(msg, true)
+    const existing = status.querySelector("button.retry-btn")
+    if (existing) return
+    const retry = document.createElement("button")
+    retry.type = "button"
+    retry.className = "secondary retry-btn"
+    retry.textContent = "再試一次"
+    retry.onclick = () => { cleanup(); createArScreen(root, { maskCanvases, onBack }) }
+    status.appendChild(document.createTextNode(" "))
+    status.appendChild(retry)
+  }
   function flashTransition() {
     const flash = document.createElement("div")
     flash.className = "ar-flash"
@@ -45,20 +73,53 @@ export function createArScreen(root, { maskCanvases, onBack }) {
   function advanceMask(reason = "手動") {
     const now = performance.now()
     if (now < cooldownUntil) return
-    cooldownUntil = now + 300
+    cooldownUntil = now + MASK_COOLDOWN_MS
     stage = (stage + 1) % STAGE_LABELS.length
     renderProgress()
     flashTransition()
     tip.textContent = reason === "揮手"
-      ? "變臉成功！繼續掃過面部，或撳「手動變臉」"
+      ? "③ 變臉成功！繼續掃過面部，或撳「手動變臉」"
       : "已轉去" + STAGE_LABELS[stage] + " · 用手喺面前任何方向一掃亦可"
+  }
+  function capturePhoto() {
+    const w = video.videoWidth, h = video.videoHeight
+    if (!w || !h) {
+      showStatus("相機畫面未就緒，請稍候再影相。", true)
+      return
+    }
+    const out = document.createElement("canvas")
+    out.width = w
+    out.height = h
+    const octx = out.getContext("2d")
+    // Mirrored composite to match on-screen AR view
+    octx.save()
+    octx.translate(w, 0)
+    octx.scale(-1, 1)
+    octx.drawImage(video, 0, 0, w, h)
+    octx.drawImage(canvas, 0, 0, w, h)
+    octx.restore()
+    const pad = (n) => String(n).padStart(2, "0")
+    const d = new Date()
+    const name = `bianlian-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.png`
+    out.toBlob((blob) => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = name
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 2000)
+      showStatus("已下載相片：" + name)
+    }, "image/png")
   }
   root.querySelector("#backBtn").onclick = () => { cleanup(); onBack() }
   root.querySelector("#manualBtn").onclick = () => advanceMask("手動")
+  root.querySelector("#photoBtn").onclick = () => capturePhoto()
 
   async function init() {
     const camFn = atob("Z2V0VXNlck1lZGlh")
     try {
+      showStatus("正在開啟相機…")
       stream = await navigator.mediaDevices[camFn]({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
@@ -66,19 +127,21 @@ export function createArScreen(root, { maskCanvases, onBack }) {
       video.srcObject = stream
       await video.play()
     } catch (err) {
-      showStatus("開唔到相機。請喺瀏覽器設定允許使用相機，然後再試。", true)
       tip.textContent = "相機未能開啟"
-      const retry = document.createElement("button")
-      retry.type = "button"
-      retry.className = "secondary"
-      retry.textContent = "再試一次"
-      retry.onclick = () => { cleanup(); createArScreen(root, { maskCanvases, onBack }) }
-      status.appendChild(document.createTextNode(" "))
-      status.appendChild(retry)
+      offerRetry("開唔到相機。請喺瀏覽器設定允許使用相機，然後再試。")
       return
     }
     try {
-      showStatus("正在載入臉部／手部模型…")
+      modelsReady = false
+      showStatus("正在載入臉部／手部模型…首次可能要十數秒，請保持網絡暢通。")
+      tip.textContent = "載入模型中…首次可能要十數秒"
+      clearLoadTimer()
+      loadTimer = setTimeout(() => {
+        if (stopped || modelsReady) return
+        tip.textContent = "模型載入較慢…"
+        offerRetry("模型仍在載入（已逾約 30 秒）。可再試一次，或檢查校網是否已放行白名單網域。")
+      }, MODEL_LOAD_TIMEOUT_MS)
+
       const vision = await FilesetResolver.forVisionTasks(modelUrls.wasm)
       const faceOpt = (delegate) => FaceLandmarker.createFromOptions(vision, {
         baseOptions: { modelAssetPath: modelUrls.face, delegate },
@@ -100,13 +163,20 @@ export function createArScreen(root, { maskCanvases, onBack }) {
         faceLandmarker = await faceOpt("CPU")
         handLandmarker = await handOpt("CPU")
       }
+      if (stopped) return
+      modelsReady = true
+      clearLoadTimer()
+      // Remove any timeout retry button if models eventually loaded
+      const retryBtn = status.querySelector("button.retry-btn")
+      if (retryBtn) retryBtn.remove()
       tip.textContent = "用手喺面前任何方向一掃，即刻變臉！雙人同玩都得"
       showStatus("模型已載入。把臉放入畫面，用手掃過面部變臉。")
       loop()
     } catch (err) {
       console.error(err)
-      showStatus("AI 模型載入失敗，請檢查網絡後再試。", true)
+      clearLoadTimer()
       tip.textContent = "模型載入失敗"
+      offerRetry("AI 模型載入失敗，請檢查網絡／校網白名單後再試。")
     }
   }
 
@@ -125,12 +195,34 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     if (faces.length >= 2) stageTitle.textContent = "雙人變臉 · " + STAGE_LABELS[stage]
     else stageTitle.textContent = STAGE_LABELS[stage]
     const hands = handLandmarker.detectForVideo(video, ts).landmarks || []
+    if (debugMode && faces.length) drawDebugEllipses(faces, w, h)
     const gestureHint = maybePassThroughWave(hands, faces, w, h)
     if (!faces.length) tip.textContent = "未偵測到臉 — 請正面望住鏡頭"
     else if (gestureHint) tip.textContent = gestureHint
     else if (stage < 4) tip.textContent = "用手由面外掃入再掃出（任何方向）即變臉 · 或撳「手動變臉」"
     else tip.textContent = "真面目 — 再掃一次或撳掣回到面譜一"
     if (stage < 4) for (const lm of faces) drawMaskOnFace(lm, w, h, maskCanvases[stage])
+  }
+  function drawDebugEllipses(faces, w, h) {
+    ctx.save()
+    for (const face of faces) {
+      const { cx, cy, rx, ry } = faceMetrics(face, w, h)
+      // Outer boundary (m≈1.05)
+      ctx.beginPath()
+      ctx.ellipse(cx, cy, rx * 1.05, ry * 1.05, 0, 0, Math.PI * 2)
+      ctx.strokeStyle = "rgba(29, 78, 216, 0.55)"
+      ctx.lineWidth = 2
+      ctx.stroke()
+      ctx.fillStyle = "rgba(29, 78, 216, 0.12)"
+      ctx.fill()
+      // Inner boundary (m≈0.85)
+      ctx.beginPath()
+      ctx.ellipse(cx, cy, rx * 0.85, ry * 0.85, 0, 0, Math.PI * 2)
+      ctx.strokeStyle = "rgba(234, 179, 8, 0.65)"
+      ctx.lineWidth = 2
+      ctx.stroke()
+    }
+    ctx.restore()
   }
   function ringPath(landmarks, idx, w, h) {
     ctx.beginPath()
@@ -177,6 +269,15 @@ export function createArScreen(root, { maskCanvases, onBack }) {
     const rx = faceW * 0.55, ry = faceH * 0.65
     return { cx, cy, rx, ry }
   }
+  function nearestFace(hx, hy, faces, w, h) {
+    let best = faces[0], bestD = Infinity
+    for (const face of faces) {
+      const { cx, cy } = faceMetrics(face, w, h)
+      const d = (hx - cx) * (hx - cx) + (hy - cy) * (hy - cy)
+      if (d < bestD) { bestD = d; best = face }
+    }
+    return best
+  }
   function radialState(hx, hy, face, w, h) {
     const { cx, cy, rx, ry } = faceMetrics(face, w, h)
     const dx = hx - cx, dy = hy - cy
@@ -190,12 +291,12 @@ export function createArScreen(root, { maskCanvases, onBack }) {
   function maybePassThroughWave(hands, faces, w, h) {
     const now = performance.now()
     if (!faces.length) { tracks.clear(); return "" }
-    const face = faces[0]
     const seen = new Set()
     let hint = ""
     hands.forEach((hand, hi) => {
       const p = palmPoint(hand)
       const hx = p.x * w, hy = p.y * h
+      const face = nearestFace(hx, hy, faces, w, h)
       const rs = radialState(hx, hy, face, w, h)
       seen.add(hi)
       let t = tracks.get(hi)
@@ -256,6 +357,7 @@ export function createArScreen(root, { maskCanvases, onBack }) {
   }
   function cleanup() {
     stopped = true
+    clearLoadTimer()
     cancelAnimationFrame(raf)
     if (stream) stream.getTracks().forEach((t) => t.stop())
     if (faceLandmarker && faceLandmarker.close) faceLandmarker.close()

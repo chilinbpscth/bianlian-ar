@@ -317,6 +317,7 @@ export function createPaintScreen(root, { onStartAr }) {
     img.src = prev
   }
   root.querySelector('#clearBtn').onclick = () => {
+    if (!confirm('確定清空呢幅面譜？此操作可撳「復原」撤回。')) return
     snapshot()
     clearMask(masks[state.active].ctx)
     redrawView()

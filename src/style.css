@@ -180,9 +180,24 @@ header.top p {
 }
 .ar-overlay .tip {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 1.12rem;
+  font-weight: 700;
+  line-height: 1.35;
   flex: 1 1 160px;
   color: #fff8f0;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.55);
+}
+.ar-overlay .manual-btn {
+  padding: 0.95rem 1.45rem;
+  font-size: 1.12rem;
+  font-weight: 700;
+  min-height: 3rem;
+}
+.ar-overlay .ar-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
 }
 .status {
   margin: 0.75rem 0 0;
