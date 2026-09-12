@@ -1,33 +1,26 @@
 /** Landing: classroom mainline (physical mask photo) vs digital paint trial. */
 export function createHomeScreen(root, { onPhysical, onDigital }) {
   root.innerHTML = `
-    <div class="app-shell">
-      <header class="top">
-        <div>
-          <h1>變臉 · 視藝 AR</h1>
-          <p>課堂主線：實體油色紙樣 → 影相上傳 → AR 變臉</p>
-        </div>
+    <div class="app-shell studio-home">
+      <header class="studio-header">
+        <div class="studio-brand"><span class="studio-seal">變</span><div>變臉工房<small>COLOUR · CHARACTER · PLAY</small></div></div>
+        <p class="studio-note">一張面譜，一個角色。</p>
       </header>
-      <div class="panel">
-        <ol class="steps home-steps">
-          <li>列印 <code>print/</code> 紙樣，剪空眼口，用油粉彩／顏料填色</li>
-          <li>揀下面「主線」影相或上傳，放入面譜 1–4</li>
-          <li>開始變臉：揮手或撳掣轉面譜</li>
-        </ol>
-        <div class="home-choices">
-          <button type="button" class="home-card home-card-main" id="physicalBtn">
-            <span class="home-card-badge">主線</span>
-            <span class="home-card-title">影相／上傳實體面譜</span>
-            <span class="home-card-desc">油粉彩、水粉紙樣影低，再入 AR。適合課堂正式流程。</span>
-          </button>
-          <button type="button" class="home-card home-card-alt" id="digitalBtn">
-            <span class="home-card-badge alt">試玩／備案</span>
-            <span class="home-card-title">iPad 畫面譜</span>
-            <span class="home-card-desc">冇實體物料、或想快速示範時，喺畫面直接畫。</span>
-          </button>
-        </div>
-        <p class="hint">紙樣同物料清單見專案 <strong>print/</strong> 資料夾。校網請放行 README 白名單網域。</p>
+      <div class="studio-progress" aria-label="創作流程"><span class="on"><b>1</b> 畫面譜</span><span><b>2</b> 戴上面譜</span><span><b>3</b> 變臉演出</span></div>
+      <section class="studio-intro"><p>01 / 開始創作</p><h1>你的角色，從一筆開始。</h1><div>用顏色與線條畫出性格，再讓面譜跟着你變臉。</div></section>
+      <div class="home-choices">
+        <button type="button" class="home-card" id="physicalBtn">
+          <span class="home-art paper-mask" aria-hidden="true"><i></i></span>
+          <span class="home-card-badge">紙上創作</span><span class="home-card-title">拍下你的面譜 <span>↗</span></span>
+          <span class="home-card-desc">把畫好的實體面譜拍下來，帶進變臉舞台。</span>
+        </button>
+        <button type="button" class="home-card" id="digitalBtn">
+          <span class="home-art illustrated-mask" aria-hidden="true"><img src="${import.meta.env.BASE_URL}references/guan-yu-steps.png" alt="" /></span>
+          <span class="home-card-badge">畫面創作</span><span class="home-card-title">畫一張面譜 <span>→</span></span>
+          <span class="home-card-desc">跟着三步插圖參考，在 iPad 上自由畫。</span>
+        </button>
       </div>
+      <p class="studio-footnote">眼口留空 · 四張面譜 · 揮手變臉</p>
     </div>
   `
 
