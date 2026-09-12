@@ -302,9 +302,10 @@ export function createArScreen(root, { maskCanvases, onBack }) {
       avgLandmark(landmarks, RIGHT_EYE, w, h),
     ].sort((a, b) => a.x - b.x)
     const mouth = avgLandmark(landmarks, MOUTH, w, h)
-    const s0 = { x: MASK_FEATURES.leftEye.x * mw, y: MASK_FEATURES.leftEye.y * mh }
-    const s1 = { x: MASK_FEATURES.rightEye.x * mw, y: MASK_FEATURES.rightEye.y * mh }
-    const s2 = { x: MASK_FEATURES.mouth.x * mw, y: MASK_FEATURES.mouth.y * mh }
+    const features = maskCanvas.maskFeatures || MASK_FEATURES
+    const s0 = { x: features.leftEye.x * mw, y: features.leftEye.y * mh }
+    const s1 = { x: features.rightEye.x * mw, y: features.rightEye.y * mh }
+    const s2 = { x: features.mouth.x * mw, y: features.mouth.y * mh }
     const tri = affineFromThree(s0, s1, s2, imgLeftEye, imgRightEye, mouth)
 
     ctx.save()

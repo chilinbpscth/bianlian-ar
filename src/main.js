@@ -9,6 +9,7 @@ let current = null
 let returnTo = "home"
 
 function showHome() {
+  history.replaceState(null, "", location.pathname + location.search)
   current?.destroy?.()
   returnTo = "home"
   current = createHomeScreen(app, {
@@ -29,6 +30,7 @@ function showUpload() {
 }
 
 function showPaint() {
+  history.replaceState(null, "", "#paint")
   current?.destroy?.()
   returnTo = "paint"
   current = createPaintScreen(app, {
@@ -51,4 +53,5 @@ function showAr(maskCanvases) {
   })
 }
 
-showHome()
+if (location.hash === "#paint") showPaint()
+else showHome()

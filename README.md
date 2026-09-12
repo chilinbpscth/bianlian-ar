@@ -41,3 +41,13 @@
 - 玩家離開超過 1.5 秒後重新入鏡，由面譜一開始。配對依據位置，交叉走位仍需真機驗證。
 - `npm test`：測試掃手、雙人進度、左右眼對位及非同步相機／模型清理（使用 Node VM modules 測試替身）。`npm run build`：正式建置。
 - 自動測試不代替 iPad Safari 實測；請驗證正面／側面貼合、快慢掃手、雙人走位、影相及返回重入。
+
+## 現有 review 版本
+
+- 線上試玩：https://chilinbpscth.github.io/bianlian-ar/
+- 直接畫板：https://chilinbpscth.github.io/bianlian-ar/#paint
+- [現況、教學方向、後續規劃與 review 清單](REVIEW.md)
+
+畫板提供白底面框與眼口底線、四張面譜、畫筆／填色／橡皮／復原。側邊以關羽啟發的生成簡化圖示範三步畫法，另有配色、角色與額紋文字說明及來源。插圖不是完整傳統譜式；無戲曲依據的卡通情緒圖已移除。
+
+畫作儲存在目前瀏覽器的 localStorage（bianlian-masks-v5-blank），不會由 localhost 自動搬到線上網域。舊版儲存保留；既有畫作可能仍有舊窿位。
