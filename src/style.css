@@ -332,11 +332,16 @@ header.top p {
 }
 .upload-preview-wrap {
   position: relative;
+  /* Match #preview 512×512 — avoid non-uniform stretch that warps oval vs photo */
+  aspect-ratio: 1 / 1;
+  max-height: min(70vh, 520px);
+  width: min(100%, 480px);
 }
 .upload-preview-wrap #preview {
   width: 100%;
   height: 100%;
   display: block;
+  object-fit: contain;
 }
 .cam-video {
   position: absolute;
@@ -347,6 +352,28 @@ header.top p {
   border-radius: 0;
   background: #111;
   z-index: 2;
+}
+/* Orange oval guide over live camera — same ratios as upload.js OVAL */
+.upload-oval-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  display: none;
+}
+.upload-preview-wrap.cam-active .upload-oval-overlay {
+  display: block;
+}
+.upload-oval-overlay ellipse.guide {
+  fill: none;
+  stroke: #f97316;
+  stroke-width: 1.15;
+}
+.upload-oval-overlay ellipse.inner {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 0.45;
+  stroke-dasharray: 1.6 1.6;
 }
 .mask-tabs button.filled:not(.active) {
   box-shadow: inset 0 -3px 0 #16a34a;

@@ -42,12 +42,14 @@ function drawImageIntoOval(ctx, img) {
   ctx.beginPath()
   ctx.ellipse(OVAL.cx, OVAL.cy, OVAL.rx, OVAL.ry, 0, 0, Math.PI * 2)
   ctx.clip()
-  // cover-fit into the square, then oval clip keeps the face area
-  const scale = Math.max(SIZE / img.width, SIZE / img.height)
+  // cover-fit relative to the oval bounding box so the face fills the guide
+  const boxW = OVAL.rx * 2
+  const boxH = OVAL.ry * 2
+  const scale = Math.max(boxW / img.width, boxH / img.height)
   const dw = img.width * scale
   const dh = img.height * scale
-  const dx = (SIZE - dw) / 2
-  const dy = (SIZE - dh) / 2
+  const dx = OVAL.cx - dw / 2
+  const dy = OVAL.cy - dh / 2
   ctx.drawImage(img, dx, dy, dw, dh)
   ctx.restore()
 }
@@ -84,9 +86,13 @@ export function createUploadScreen(root, { onStartAr, onBack }) {
       <div class="panel">
         <div class="mask-tabs" id="maskTabs"></div>
         <div class="upload-layout">
-          <div class="canvas-wrap upload-preview-wrap">
+          <div class="canvas-wrap upload-preview-wrap" id="uploadPreviewWrap">
             <canvas id="preview" width="${SIZE}" height="${SIZE}"></canvas>
             <video id="camVideo" class="cam-video" playsinline muted autoplay hidden></video>
+            <svg class="upload-oval-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <ellipse class="guide" cx="50" cy="50" rx="44" ry="48" />
+              <ellipse class="inner" cx="50" cy="50" rx="36.08" ry="39.36" />
+            </svg>
           </div>
           <div class="tools">
             <h2>放入相片</h2>
@@ -115,6 +121,7 @@ export function createUploadScreen(root, { onStartAr, onBack }) {
 
   const preview = root.querySelector("#preview")
   const previewCtx = preview.getContext("2d")
+  const previewWrap = root.querySelector("#uploadPreviewWrap")
   const tabs = root.querySelector("#maskTabs")
   const fileInput = root.querySelector("#fileInput")
   const camVideo = root.querySelector("#camVideo")
@@ -255,6 +262,7 @@ export function createUploadScreen(root, { onStartAr, onBack }) {
     camVideo.srcObject = null
     captureBtn.hidden = true
     camToggle.textContent = "開啟相機"
+    previewWrap.classList.remove("cam-active")
     redrawPreview()
   }
 
@@ -272,6 +280,7 @@ export function createUploadScreen(root, { onStartAr, onBack }) {
       camVideo.hidden = false
       captureBtn.hidden = false
       camToggle.textContent = "關閉相機"
+      previewWrap.classList.add("cam-active")
       showStatus("對準紙樣，撳「影相放入」。")
     } catch (err) {
       console.error(err)
